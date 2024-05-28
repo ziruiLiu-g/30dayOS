@@ -1,4 +1,4 @@
-.bin
-.lst
-.sys
-.lst
+*.bin
+*.lst
+*.sys
+*.lst
