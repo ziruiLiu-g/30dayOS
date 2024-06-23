@@ -7,18 +7,16 @@ void fifo8_init(struct FIFO8 *fifo, int size, unsigned char *buf) {
     fifo->flags = 0;
     fifo->next_r = 0;
     fifo->next_w = 0;
-    return;
 }
 
 int fifo8_put(struct FIFO8 *fifo, unsigned char data) {
-    if (fifo->free = 0) {
+    if (fifo->free == 0) {
         // full
         fifo->flags |= FLAGS_OVERRUN;
         return -1;
     }
 
-    fifo->buf[fifo->next_w] = data;
-    fifo->next_w++;
+    fifo->buf[fifo->next_w++] = data;
     if (fifo->next_w == fifo->size) {
         fifo->next_w = 0;
     }
