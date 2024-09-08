@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "io.h": "c",
+        "memory.h": "c",
+        "mouse.h": "c",
+        "sheet.h": "c",
+        "window.h": "c",
+        "int.h": "c",
+        "timer.h": "c"
+    }
+}
