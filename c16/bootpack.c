@@ -53,7 +53,7 @@ int main(void)
     struct Shtctl *shtctl;
     struct Sheet *sht_back, *sht_mouse, *sht_win, *sht_win_b[3];
     unsigned char *buf_back, buf_mouse[256], *buf_win, *buf_win_b;
-    struct Task *task_b[3], *task_a;
+    struct Task *task_b[3];
 
     struct FIFO32 fifo;
     int fifobuf[128], data;
@@ -87,7 +87,7 @@ int main(void)
     init_palette();
 
     shtctl = shtctl_init(memman, binfo->vram, binfo->scrnx, binfo->scrny);
-    task_a = task_init(memman);
+    struct Task *task_a = task_init(memman);
     fifo.task = task_a;
     task_run(task_a, 1, 0);
 
@@ -123,13 +123,13 @@ int main(void)
     /* For Win */
     sht_win = sheet_alloc(shtctl);
     buf_win = (unsigned char *)memman_alloc_4k(memman, 160 * 52);
-    sheet_setbuf(sht_win, buf_win, 144, 52, -1);
-    make_window8(buf_win, 144, 52, "task_a", 1);
+    sheet_setbuf(sht_win, buf_win, 160, 52, -1); // 没有透明色
+    make_window8(buf_win, 160, 52, "task_a", 1);
     make_textbox8(sht_win, 8, 28, 128, 16, COL8_FFFFFF);
     int cursor_x = 8;
     int cursor_c = COL8_FFFFFF;
     timer = timer_alloc();
-    timer_init(timer, &fifo, 5);
+    timer_init(timer, &fifo, 1);
     timer_set_timer(timer, 50);
 
     /* For Mouse */
@@ -140,12 +140,15 @@ int main(void)
     int my = (binfo->scrny - 28 - 16) / 2;
 
     sheet_slide(sht_back, 0, 0);
-    sheet_slide(sht_mouse, mx, my);
+    sheet_slide(sht_win_b[0], 168, 56);
+    sheet_slide(sht_win_b[1], 8, 116);
+    sheet_slide(sht_win_b[2], 168, 116);
     sheet_slide(sht_win, 80, 72);
+    sheet_slide(sht_mouse, mx, my);
     sheet_updown(sht_back, 0);
     sheet_updown(sht_win_b[0], 1);
-    sheet_updown(sht_win_b[0], 2);
-    sheet_updown(sht_win_b[0], 3);
+    sheet_updown(sht_win_b[1], 2);
+    sheet_updown(sht_win_b[2], 3);
     sheet_updown(sht_win, 4);
     sheet_updown(sht_mouse, 5);
     sprintf(s, "(%3d, %3d)", mx, my);
@@ -163,6 +166,7 @@ int main(void)
         } else {
             data = fifo32_get(&fifo);
             io_sti();
+
             if (256 <= data && data <= 511) {
                 sprintf(s, "%02X", data - 256);
                 put_fonts8_asc_sht(sht_back, 0, 16, COL8_FFFFFF, COL8_008484, s, 2);
@@ -217,11 +221,6 @@ int main(void)
                         sheet_slide(sht_win, mx - 80, my - 8);
                     }
                 }
-            } else if (data == 5) {
-                    put_fonts8_asc_sht(sht_back, 0, 64, COL8_FFFFFF, COL8_008484, "5[SEC]", 7);
-                    far_jmp(0, 4 * 8);
-            } else if (data == 3) {
-                put_fonts8_asc_sht(sht_back, 0, 80, COL8_FFFFFF, COL8_008484, "3[SEC]", 7);
             } else if (data <= 1) {
                 if (data) {
                     timer_init(timer, &fifo, 0);

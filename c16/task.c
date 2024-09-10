@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "task.h"
 #include "timer.h"
 #include "memory.h"
@@ -34,13 +36,17 @@ struct Task *task_init(struct MemMan *memman) {
     struct SegmentDescriptor *gdt = (struct SegmentDescriptor *) ADR_GDT;
     taskctl = (struct TaskCtl *) memman_alloc_4k(memman, sizeof(struct TaskCtl));
 
+    for (int i = 0; i < MAX_TASKS; i++) {
+        taskctl->tasks0[i].flags = 0;
+        taskctl->tasks0[i].sel = (TASK_GDT0 + i) * 8;
+        set_segmdesc(gdt + TASK_GDT0 + i, 103, (int)&taskctl->tasks0[i].tss,
+                    AR_TSS32);
+    }
+
     for (i = 0; i < MAX_TASKLEVELS; i++) {
         taskctl->level[i].running = 0;
         taskctl->level[i].now = 0;
     }
-    // taskctl->tasks0[i].flags = 0;
-    //     taskctl->tasks0[i].sel = (TASK_GDT0 + i) * 8;
-    //     set_segmdesc(gdt + TASK_GDT0 + i, 103, (int) &taskctl->tasks0[i].tss, AR_TSS32);
 
     task = task_alloc();
     task->flags = 2; // active
