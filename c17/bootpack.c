@@ -2,43 +2,73 @@
 
 #include "bootpack.h"
 #include "desctbl.h"
+#include "fifo.h"
 #include "graphic.h"
 #include "int.h"
 #include "io.h"
 #include "keyboard.h"
-#include "fifo.h"
 #include "memory.h"
 #include "mouse.h"
 #include "sheet.h"
-#include "window.h"
-#include "timer.h"
 #include "task.h"
+#include "timer.h"
+#include "window.h"
 
-void task_b_main(struct Sheet *sht_back_b) {
-    struct FIFO32 fifo;
-    struct Timer *timer_1s;
-    int i, fifobuf[128], count = 0, count0 = 0;
-    char s[12];
+void console_task(struct Sheet *sheet) {
+    struct Timer *timer;
+    struct Task *task = task_now();
+    char s[2];
 
-    fifo32_init(&fifo, 128, fifobuf, 0);
-    timer_1s = timer_alloc();
-    timer_init(timer_1s, &fifo, 100);
-    timer_set_timer(timer_1s, 100);
+    int i, fifobuf[128], cursor_x = 16, cursor_c = COL8_000000;
+    fifo32_init(&task->fifo, 128, fifobuf, task);
 
-    for (;;) { 
-        count++;
+    timer = timer_alloc();
+    timer_init(timer, &task->fifo, 1);
+    timer_set_timer(timer, 50);
+
+    put_fonts8_asc_sht(sheet, 8, 28, COL8_FFFFFF, COL8_000000, ">", 1);
+
+    for (;;) {
         io_cli();
-        if (fifo32_status(&fifo) == 0) {
-            io_stihlt();
-        } else {
-            i = fifo32_get(&fifo);
+
+        if (fifo32_status(&task->fifo) == 0) {
+            task_sleep(task);
             io_sti();
-            if (i == 100) {
-                sprintf(s, "%11d", count);
-                put_fonts8_asc_sht(sht_back_b, 24, 28, COL8_000000, COL8_C6C6C6, s, 11);
-                count0 = count;
-                timer_set_timer(timer_1s, 100);
+        } else {
+            i = fifo32_get(&task->fifo);
+            io_sti();
+            
+            if (i <= 1) {
+                if (i != 0) {
+                    timer_init(timer, &task->fifo, 0);
+                    cursor_c = COL8_FFFFFF;
+                } else {
+                    timer_init(timer, &task->fifo, 1);
+                    cursor_c = COL8_000000;
+                }
+
+                timer_set_timer(timer, 50);
             }
+
+            if (i >= 256 && i <= 511) {
+                if (i == 8 + 256) {
+                    // backspace
+                    if (cursor_x > 16) {
+                        put_fonts8_asc_sht(sheet, cursor_x, 28, COL8_FFFFFF, COL8_000000, " ", 1);
+                        cursor_x -= 8;
+                    }
+                } else {
+                    if (cursor_x < 240) {
+                        s[0] = i - 256;
+                        s[i] = 0;
+                        put_fonts8_asc_sht(sheet, cursor_x, 28, COL8_FFFFFF, COL8_000000, s, 1);
+                        cursor_x += 8;
+                    }
+                }
+            }
+
+            box_fill8(sheet->buf, sheet->bxsize, cursor_c, cursor_x, 28, cursor_x + 7, 43);
+            sheet_refresh(sheet, cursor_x, 28, cursor_x + 8, 44);
         }
     }
 }
@@ -51,15 +81,16 @@ int main(void)
     struct MouseDec mdec;
     char s[40], mcursor[256];
     struct Shtctl *shtctl;
-    struct Sheet *sht_back, *sht_mouse, *sht_win, *sht_win_b[3];
-    unsigned char *buf_back, buf_mouse[256], *buf_win, *buf_win_b;
-    struct Task *task_b[3];
+    struct Sheet *sht_back, *sht_mouse, *sht_win, *sht_cons;
+    unsigned char *buf_back, buf_mouse[256], *buf_win, *buf_cons;
 
-    struct FIFO32 fifo;
-    int fifobuf[128], data;
+    struct FIFO32 fifo, keycmd;
+    int fifobuf[128], keycmd_buf[32];
+    // caplock at 6th bit of binfo->leds, right shift 4 bit and '&7' we get the 4th 5th 6th bit status
+    // bin 7 = 111
+    int data, key_to = 0, key_shift = 0, key_leds = (binfo->leds >> 4) & 7, keycmd_wait = -1;
+
     struct Timer *timer;
-
-    
 
     init_gdtidt();
     init_pic(); // GDT/IDT完成初始化，开放CPU中断
@@ -67,6 +98,7 @@ int main(void)
     
 
     fifo32_init(&fifo, 128, fifobuf, 0);
+    fifo32_init(&keycmd, 32, keycmd_buf, 0);
     init_keyboard(&fifo, 256);
     enable_mouse(&fifo, 512, &mdec);
 
@@ -99,26 +131,23 @@ int main(void)
                 -1);                               // 没有透明色
     init_screen8(buf_back, binfo->scrnx, binfo->scrny);
 
-    /* For Win b */
-    for (int i = 0; i < 3; i++) {
-        sht_win_b[i] = sheet_alloc(shtctl);
-        buf_win_b = (unsigned char *) memman_alloc_4k(memman, 144 * 52);
-        sheet_setbuf(sht_win_b[i], buf_win_b, 144, 52, -1);
-        sprintf(s, "task_b%d", i);
-        make_window8(buf_win_b, 144, 52, s, 0);
-
-        task_b[i] = task_alloc();
-        task_b[i]->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 8; // address of tail of stack. 
-        task_b[i]->tss.eip = (int) &task_b_main;
-        task_b[i]->tss.es = 1 * 8;
-        task_b[i]->tss.cs = 2 * 8;
-        task_b[i]->tss.ss = 1 * 8;
-        task_b[i]->tss.ds = 1 * 8;
-        task_b[i]->tss.fs = 1 * 8;
-        task_b[i]->tss.gs = 1 * 8;
-        *((int *) (task_b[i]->tss.esp + 4)) = (int) sht_win_b[i];
-        task_run(task_b[i], 2, i + 1);
-    }
+    /* For Console */
+    sht_cons = sheet_alloc(shtctl);
+    buf_cons = (unsigned char *) memman_alloc_4k(memman, 256 * 165);
+    sheet_setbuf(sht_cons, buf_cons, 256, 165, -1);
+    make_window8(buf_cons, 256, 165, "console",  0);
+    make_textbox8(sht_cons, 8, 28, 240, 128, COL8_000000);
+    struct Task *task_cons = task_alloc();
+    task_cons->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 8; // address of tail of stack. 
+    task_cons->tss.eip = (int) &console_task;
+    task_cons->tss.es = 1 * 8;
+    task_cons->tss.cs = 2 * 8;
+    task_cons->tss.ss = 1 * 8;
+    task_cons->tss.ds = 1 * 8;
+    task_cons->tss.fs = 1 * 8;
+    task_cons->tss.gs = 1 * 8;
+    *((int *) (task_cons->tss.esp + 4)) = (int) sht_cons;
+    task_run(task_cons, 2, 2); // level = 2; priority = 2;
 
     /* For Win */
     sht_win = sheet_alloc(shtctl);
@@ -140,25 +169,31 @@ int main(void)
     int my = (binfo->scrny - 28 - 16) / 2;
 
     sheet_slide(sht_back, 0, 0);
-    sheet_slide(sht_win_b[0], 168, 56);
-    sheet_slide(sht_win_b[1], 8, 116);
-    sheet_slide(sht_win_b[2], 168, 116);
+    sheet_slide(sht_cons, 32, 4);
     sheet_slide(sht_win, 80, 72);
     sheet_slide(sht_mouse, mx, my);
     sheet_updown(sht_back, 0);
-    sheet_updown(sht_win_b[0], 1);
-    sheet_updown(sht_win_b[1], 2);
-    sheet_updown(sht_win_b[2], 3);
-    sheet_updown(sht_win, 4);
-    sheet_updown(sht_mouse, 5);
+    sheet_updown(sht_cons, 1);
+    sheet_updown(sht_win, 2);
+    sheet_updown(sht_mouse, 3);
     sprintf(s, "(%3d, %3d)", mx, my);
     put_fonts8_asc_sht(sht_back, 0, 0, COL8_FFFFFF, COL8_008484, s, 10);
     sprintf(s, "memory %dMB, free: %dKB", memtotal / (1024 * 1024),
             memman_total(memman) / 1024);
     put_fonts8_asc_sht(sht_back, 0, 32, COL8_FFFFFF, COL8_008484, s, 40);
 
+    // avoid keyboard conflict
+    fifo32_put(&keycmd, KEYCMD_LED);
+    fifo32_put(&keycmd, key_leds);
+
     for (;;)
     {
+        if (fifo32_status(&keycmd) > 0 && keycmd_wait < 0) {
+            keycmd_wait = fifo32_get(&keycmd);
+            wait_KBC_sendready();
+            io_out8(PORT_KEYDAT, keycmd_wait);
+        }
+
         io_cli();
         if (fifo32_status(&fifo) == 0) {
             task_sleep(task_a);
@@ -166,26 +201,99 @@ int main(void)
         } else {
             data = fifo32_get(&fifo);
             io_sti();
-
-            if (256 <= data && data <= 511) {
+            if (data == 256 + 0x3a) {  // capslock
+                key_leds ^= 4;
+                fifo32_put(&keycmd, KEYCMD_LED);
+                fifo32_put(&keycmd, key_leds);
+            }
+            if (data == 256 + 0x45) {  // numlock
+                key_leds ^= 2;
+                fifo32_put(&keycmd, KEYCMD_LED);
+                fifo32_put(&keycmd, key_leds);
+            }
+            if (data == 256 + 0x46) {  // scrollLock
+                key_leds ^= 1;
+                fifo32_put(&keycmd, KEYCMD_LED);
+                fifo32_put(&keycmd, key_leds);
+            }
+            if (data == 256 + 0xfa) {   // keyboard get data
+                keycmd_wait = -1;
+            }
+            if (data == 256 + 0xfe) {   // keyboard fail to get data
+                wait_KBC_sendready();
+                io_out8(PORT_KEYDAT, keycmd_wait);
+            }
+            if (256 <= data && data <= 511) { // keyboard
                 sprintf(s, "%02X", data - 256);
                 put_fonts8_asc_sht(sht_back, 0, 16, COL8_FFFFFF, COL8_008484, s, 2);
 
-                if (data < 256 + 0x54) {
-                    if (keytable[data - 256] != 0 && cursor_x < 144) {
-                        s[0] = keytable[data - 256];
-                        s[1] = 0;
-                        put_fonts8_asc_sht(sht_win, cursor_x, 28, COL8_000000, COL8_C6C6C6, s, 1);
-                        cursor_x += 8;
+                if (data < 0x80 + 256) {
+                    if (key_shift == 0) {
+                        s[0] = keytable0[data - 256];
+                    } else {
+                        s[0] = keytable1[data - 256];
+                    }
+                } else {
+                    s[0] = 0;
+                }
+                if ('A' <= s[0] && s[0] <= 'Z') {
+                    // 4 = 100
+                    // key_leds & 4 gets 3rd bit of key_leds, which is the 6th bit of binfo->leds
+                    if ((!(key_leds & 4) && !key_shift) || ((key_leds & 4) && key_shift)) {
+                        s[0] += 0x20;
                     }
                 }
-                if (data == 256 + 0x0e && cursor_x > 8) {
-                    put_fonts8_asc_sht(sht_win, cursor_x, 28, COL8_000000, COL8_C6C6C6, " ", 1);
-                    cursor_x -= 8;
+
+                if (s[0] != 0) {    /* normal char */
+                    if (key_to == 0) {
+                        if (cursor_x < 128) {
+                            s[1] = 0;
+                            put_fonts8_asc_sht(sht_win, cursor_x, 28, COL8_000000, COL8_FFFFFF, s, 1);
+                            cursor_x += 8;
+                        }
+                    } else {
+                        fifo32_put(&task_cons->fifo, s[0] + 256);
+                    }
+                }
+                if (data == 256 + 0x0e) {   // backspace
+                    if (key_to == 0) {
+                        if (cursor_x > 8) {
+                            put_fonts8_asc_sht(sht_win, cursor_x, 28, COL8_000000, COL8_FFFFFF, " ", 1);
+                            cursor_x -= 8;
+                        }
+                    } else {
+                        fifo32_put(&task_cons->fifo, 8 + 256);
+                    }
+                }
+                if (data == 256 + 0x0f) {   // tab
+                    if (key_to == 0) {
+                        key_to = 1;
+                        make_wtitle8(buf_win, sht_win->bxsize, "task_a", 0);
+                        make_wtitle8(buf_cons, sht_cons->bxsize, "console", 1);
+                    } else {
+                        key_to = 0;
+                        make_wtitle8(buf_win, sht_win->bxsize, "task_a", 1);
+                        make_wtitle8(buf_cons, sht_cons->bxsize, "console", 0);
+                    }
+
+                    sheet_refresh(sht_win, 0, 0, sht_win->bxsize, 21);
+                    sheet_refresh(sht_cons, 0, 0, sht_cons->bxsize, 21);
+                }
+                if (data == 256 + 0x2a) { // left shift on
+                    key_shift |= 1;
+                }
+                if (data == 256 + 0x36) { // right shift on
+                    key_shift |= 2;
+                }
+                if (data == 256 + 0xaa) { // left shift off
+                    key_shift &= ~1;
+                }
+                if (data == 256 + 0xb6) { // left shift off
+                    key_shift &= ~2;
                 }
                 box_fill8(sht_win->buf, sht_win->bxsize, cursor_c, cursor_x, 28, cursor_x + 7, 43);
                 sheet_refresh(sht_win, cursor_x, 28, cursor_x + 8, 44);
-            } else if (512 <= data && data <= 767) {
+            } else if (512 <= data && data <= 767) { // mouse
                 if (mouse_decode(&mdec, data - 512)) {
                     sprintf(s, "[lcr %4d %4d]", mdec.x, mdec.y);
                     if ((mdec.btn & 0x01) != 0) {

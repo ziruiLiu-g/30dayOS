@@ -10,9 +10,6 @@
 #define MAX_TASKS_LV  100
 #define MAX_TASKLEVELS 10
 
-extern struct Timer *task_timer;
-extern struct TaskCtl *taskctl;
-
 // 104 bytes
 struct TSS32 {
   int backlink, esp0, ss0, esp1, ss1, esp2, ss2, cr3;
@@ -21,9 +18,12 @@ struct TSS32 {
   int ldtr, iomap;
 };
 
+struct FIFO32;
+
 struct Task {
   int sel, flags;   // sel for gdt number
   int priority, level;
+  struct FIFO32 fifo;
   struct TSS32 tss;
 };
 
@@ -40,6 +40,9 @@ struct TaskCtl {
   struct Task tasks0[MAX_TASKS];
 };
 
+extern struct Timer *task_timer;
+extern struct TaskCtl *taskctl;
+
 void load_tr(int tr);
 void far_jmp(int eip, int cs);
 void task_switch(void);
@@ -53,5 +56,7 @@ struct Task *task_now(void);
 void task_add(struct Task *task);
 void task_remove(struct Task *task);
 void task_switchsub(void);
+
+void task_idle(void);
 
 #endif // _TASK_H_

@@ -2,7 +2,6 @@
 
 #include "timer.h"
 #include "io.h"
-#include "fifo.h"
 #include "int.h"
 #include "task.h"
 
