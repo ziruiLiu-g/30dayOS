@@ -169,7 +169,7 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
                                 }
                                 break;
                             }
-        type_next_file:
+                        type_next_file:
                             x++;
                         }
 
@@ -264,16 +264,11 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
                 } else {
                     if (cursor_x < 240) {
                         s[0] = i - 256;
-                        s[i] = 0;
+                        s[1] = 0;
                         cmdline[cursor_x / 8 - 2] = i - 256;
                         put_fonts8_asc_sht(sheet, cursor_x, cursor_y, COL8_FFFFFF, COL8_000000, s, 1);
                         cursor_x += 8;
-                    } 
-                    // else {
-                    //     cursor_y += 16;
-                    //     put_fonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, ">", 1);
-                    //     cursor_x = 16;
-                    // }
+                    }
                 }
             }
 

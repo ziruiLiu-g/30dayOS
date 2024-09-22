@@ -23,8 +23,8 @@ L_OBJS  := $(LIBC_DIR)/stdio/stdio.bin $(LIBC_DIR)/string/strcmp.bin $(LIBC_DIR)
 # Kernel Objects
 K_OBJS	:= bootpack.bin io.bin pm.bin hankaku.bin desctbl.bin graphic.bin \
 		int.bin inthandler.bin fifo.bin keyboard.bin mouse.bin \
-		memory.bin sheet.bin window.bin timer.bin task_asm.bin task.bin console.bin fs.bin
-
+		memory.bin sheet.bin window.bin timer.bin task_asm.bin \
+		task.bin console.bin fs.bin
 # Applications
 APPS	:= app/hlt.hrb
 SYS	:= haribote.sys
@@ -49,6 +49,9 @@ hankaku.bin: ../hankaku/hankaku.asm
 
 %.bin: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+%.hrb: %.asm
+	$(AS) -f bin $< -o $@
 
 kernel.sys: ${K_OBJS} ${L_OBJS}
 	$(LD) -m elf_i386 --oformat binary -o kernel.sys -T kernel.ld $^
