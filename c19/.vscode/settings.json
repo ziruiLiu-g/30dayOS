@@ -8,6 +8,8 @@
         "int.h": "c",
         "timer.h": "c",
         "keyboard.h": "c",
-        "task.h": "c"
+        "task.h": "c",
+        "console.h": "c",
+        "fs.h": "c"
     }
 }
