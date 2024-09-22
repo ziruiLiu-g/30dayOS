@@ -118,7 +118,7 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
                                 }
                             }
                         }
-                            cursor_y = cons_newline(cursor_y, sheet);
+                        cursor_y = cons_newline(cursor_y, sheet);
                     } else if (cmdline[0] != 0) {
                         put_fonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, "Bad command.", 30);
                         cursor_y = cons_newline(cursor_y, sheet);
