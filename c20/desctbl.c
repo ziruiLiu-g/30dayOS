@@ -1,5 +1,6 @@
 #include "desctbl.h"
 #include "int.h"
+#include "api.h"
 
 void init_gdtidt(void) {
   struct SegmentDescriptor *gdt = (struct SegmentDescriptor *) 0x00270000;
@@ -24,6 +25,7 @@ void init_gdtidt(void) {
   set_gatedesc(idt + 0x21, (int) asm_int_handler21, 2 * 8, AR_INTGATE32);
   set_gatedesc(idt + 0x27, (int) asm_int_handler27, 2 * 8, AR_INTGATE32);
   set_gatedesc(idt + 0x2c, (int) asm_int_handler2c, 2 * 8, AR_INTGATE32);
+  set_gatedesc(idt + 0x40, (int) asm_hrb_api, 2 * 8, AR_INTGATE32);
 
   return;
 }
