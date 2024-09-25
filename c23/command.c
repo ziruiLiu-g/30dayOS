@@ -89,6 +89,9 @@ int cmd_app(struct Console *cons, int *fat, char *cmdline) {
   struct Task *task = task_now();
   int i;
 
+  struct Shtctl *shtctl;
+  struct Sheet *sht;
+
   for (i = 0; i < 13; i++) {
     if (cmdline[i] <= ' ') {
       break;
@@ -138,6 +141,14 @@ int cmd_app(struct Console *cons, int *fat, char *cmdline) {
       }
 
       start_app(elfhdr->e_entry, 1003 * 8, 0, 1004 * 8, &(task->tss.esp0));
+      /* To close win */
+      shtctl = (struct Shtctl *) *((int *) 0x0fe4);
+      for (i = 0; i < MAX_SHEETS; i++) {
+        sht = &(shtctl->sheets0[i]);
+        if (sht->flags != 0 && sht->task == task) {
+          sheet_free(sht);
+        }
+      }
       memman_free_4k(memman, (int)q, 64 * 1024);
     } else {
       cons_putstr(cons, "ELF file format error.\n");
