@@ -11,11 +11,11 @@
 #define TIMER_FLAGS_USING 2
 
 struct Timer {
-    unsigned int flags;
-    unsigned int timeout;
-    struct FIFO32 *fifo;
-    unsigned char data;
-    struct Timer *next;
+  struct Timer *next;
+  unsigned int flags, flags2;
+  unsigned int timeout;
+  struct FIFO32 *fifo;
+  int data;
 };
 
 struct TimerCtl {
@@ -31,6 +31,9 @@ void int_handler20(int *esp);
 void timer_set_timer(struct Timer *timer, unsigned int timeout);
 struct Timer *timer_alloc(void);
 void timer_free(struct Timer *timer);
-void timer_init(struct Timer *timer, struct FIFO32 *fifo, unsigned char data);
+void timer_init(struct Timer *timer, struct FIFO32 *fifo, int data);
+
+int timer_cancel(struct Timer *timer);
+void timer_cancel_all(struct FIFO32 *fifo);
 
 #endif

@@ -39,6 +39,11 @@ int main(void)
 
     struct Timer *timer;
 
+    int j, x, y;
+    int mmx, mmy; // position before mouse move window
+    struct Sheet *sht = 0, *key_win;
+
+
     init_gdtidt();
     init_pic(); // GDT/IDT完成初始化，开放CPU中断
     io_sti(); // IF(interrupt flag) 变为1， cpu可以开始接受外部指令
@@ -125,15 +130,13 @@ int main(void)
     sheet_updown(sht_cons, 1);
     sheet_updown(sht_win, 2);
     sheet_updown(sht_mouse, 3);
-    // sprintf(s, "(%3d, %3d)", mx, my);
-    // put_fonts8_asc_sht(sht_back, 0, 0, COL8_FFFFFF, COL8_008484, s, 10);
-    // sprintf(s, "memory %dMB, free: %dKB", memtotal / (1024 * 1024),
-    //         memman_total(memman) / 1024);
-    // put_fonts8_asc_sht(sht_back, 0, 32, COL8_FFFFFF, COL8_008484, s, 40);
-
-    // avoid keyboard conflict
     fifo32_put(&keycmd, KEYCMD_LED);
     fifo32_put(&keycmd, key_leds);
+
+    key_win = sht_win;
+    sht_cons->task = task_cons;
+    sht_cons->flags |= 0x20; // have cursor
+
 
     for (;;)
     {
@@ -150,7 +153,10 @@ int main(void)
         } else {
             data = fifo32_get(&fifo);
             io_sti();
-            
+            if (key_win->flags == 0) {  // input window was closed
+                key_win = shtctl->sheets[shtctl->top - 1];
+                cursor_c = keywin_on(key_win, sht_win, cursor_c);
+            }
             if (256 <= data && data <= 511) { // keyboard
 
                 if (data < 0x80 + 256) {
@@ -171,7 +177,7 @@ int main(void)
                 }
 
                 if (!key_ctl && s[0]) {
-                    if (!key_to) {
+                    if (key_win == sht_win) {
                         if (cursor_x < 128) {
                         // 显示一个字符之后将光标后移一位
                             s[1] = '\0';
@@ -180,7 +186,7 @@ int main(void)
                             cursor_x += 8;
                         }
                     } else {
-                        fifo32_put(&task_cons->fifo, s[0] + 256);
+                        fifo32_put(&key_win->task->fifo, s[0] + 256);
                     }
                 }
                 if (data == 256 + 0x2e && key_ctl != 0 && task_cons->tss.ss0 != 0) {
@@ -192,33 +198,23 @@ int main(void)
                     io_sti();
                 }
                 if (data == 256 + 0x0e) {   // backspace
-                    if (key_to == 0) {
+                    if (key_win == sht_win) {
                         if (cursor_x > 8) {
                             put_fonts8_asc_sht(sht_win, cursor_x, 28, COL8_000000, COL8_FFFFFF, " ", 1);
                             cursor_x -= 8;
                         }
                     } else {
-                        fifo32_put(&task_cons->fifo, 8 + 256);
+                        fifo32_put(&key_win->task->fifo, 8 + 256);
                     }
                 }
                 if (data == 256 + 0x0f) {   // tab
-                    if (key_to == 0) {
-                        key_to = 1;
-                        make_window_title8(buf_win, sht_win->bxsize, "task_a", 0);
-                        make_window_title8(buf_cons, sht_cons->bxsize, "console", 1);
-                        cursor_c = -1;
-                        box_fill8(sht_win->buf, sht_win->bxsize, COL8_FFFFFF, cursor_x, 28, cursor_x + 7, 43);
-                        fifo32_put(&task_cons->fifo, 2); // cursor on
-                    } else {
-                        key_to = 0;
-                        make_window_title8(buf_win, sht_win->bxsize, "task_a", 1);
-                        make_window_title8(buf_cons, sht_cons->bxsize, "console", 0);
-                        cursor_c = COL8_000000;
-                        fifo32_put(&task_cons->fifo, 3); // cursor off
+                    cursor_c = keywin_off(key_win, sht_win, cursor_c, cursor_x);
+                    j = key_win->height - 1; // press tab, switch to next windown
+                    if (j == 0) {
+                        j = shtctl->top - 1;
                     }
-
-                    sheet_refresh(sht_win, 0, 0, sht_win->bxsize, 21);
-                    sheet_refresh(sht_cons, 0, 0, sht_cons->bxsize, 21);
+                    key_win = shtctl->sheets[j];
+                    cursor_c = keywin_on(key_win, sht_win, cursor_c);
                 }
                 if (data == 256 + 0x2a) { // left shift on
                     key_shift |= 1;
@@ -254,9 +250,12 @@ int main(void)
                     fifo32_put(&keycmd, key_leds);
                 }
                 if (data == 256 + 0x1c) { // enter
-                    if (key_to != 0) {
-                        fifo32_put(&task_cons->fifo, 10 + 256);
+                    if (key_win != sht_win) {
+                        fifo32_put(&key_win->task->fifo, 10 + 256);
                     }
+                }
+                if (data == 256 + 0x1d && shtctl->top > 2) {
+                    sheet_updown(shtctl->sheets[1], shtctl->top - 1);
                 }
                 if (data == 256 + 0xfa) {   // keyboard get data
                     keycmd_wait = -1;
@@ -290,7 +289,49 @@ int main(void)
                     sheet_slide(sht_mouse, mx, my);
 
                     if (mdec.btn & 0x01) {
-                        sheet_slide(sht_win, mx - 80, my - 8);
+                        // mouse left click
+                        // search sheet from top to bottom
+                        if (mmx < 0) {
+                            for (j = shtctl->top - 1; j > 0; j--) {
+                                sht = shtctl->sheets[j];
+                                x = mx - sht->vx0;
+                                y = my - sht->vy0;
+                                if (0 <= x && x < sht->bxsize && 0 <= y && y < sht->bysize) {
+                                    if (sht->buf[y * sht->bxsize + x] != sht->col_inv) {
+                                        sheet_updown(sht, shtctl->top - 1);
+                                        if (sht != key_win) {
+                                            cursor_c = keywin_off(key_win, sht_win, cursor_c, cursor_x);
+                                            key_win = sht;
+                                            cursor_c = keywin_on(key_win, sht_win, cursor_c);
+                                        }
+                                        if (3 <= x && x < sht->bxsize - 3 && 3 <= y && y < 21) {
+                                            mmx = mx;
+                                            mmy = my;
+                                        }       
+                                        if (sht->bxsize - 21 <= x && x < sht->bxsize - 5 && 5 <= y && y < 19) {
+                                            // click x "close"
+                                            if ((sht->flags & 0x10) != 0) {
+                                                cons = (struct Console *) *((int *) 0x0fec);
+                                                cons_putstr(cons, "\nBreak(mouse) :\n");
+                                                io_cli();
+                                                task_cons->tss.eax = (int) &(task_cons->tss.esp0);
+                                                task_cons->tss.eip = (int) asm_end_app;
+                                                io_sti();
+                                            }
+                                        }     
+                                        break;                        
+                                    }
+                                }
+                            }
+                        } else {
+                            x = mx - mmx;
+                            y = my - mmy;
+                            sheet_slide(sht, sht->vx0 + x, sht->vy0 + y);
+                            mmx = mx;
+                            mmy = my;
+                        }
+                    } else {
+                        mmx = -1;
                     }
                 }
             } else if (data <= 1) {

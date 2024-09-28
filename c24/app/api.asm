@@ -6,6 +6,7 @@
   GLOBAL api_point, api_refresh_win, api_line_win
   GLOBAL api_close_win
   GLOBAL api_get_key
+  GLOBAL api_alloc_timer, api_init_timer, api_set_timer, api_free_timer
 
 api_putchar:
     MOV     EDX, 1
@@ -173,3 +174,35 @@ api_get_key:            ; int api_get_key(int mode);
     MOV     EAX, [ESP+4]
     INT     0x40
     RET
+
+
+api_alloc_timer:        ; int api_alloc_timer(void);
+  MOV     EDX, 16
+  INT     0x40
+  RET
+
+api_init_timer:         ; void api_init_timer(int timer, int data);
+  PUSH    EBX
+  MOV     EDX, 17
+  MOV     EBX, [ESP+8]
+  MOV     EAX, [ESP+12]
+  INT     0x40
+  POP     EBX
+  RET
+
+api_set_timer:          ; void api_set_timer(int timer, int time);
+  PUSH    EBX
+  MOV     EDX, 18
+  MOV     EBX, [ESP+8]
+  MOV     EAX, [ESP+12]
+  INT     0x40
+  POP     EBX
+  RET
+
+api_free_timer:         ; void api_free_timer(int timer);
+  PUSH    EBX
+  MOV     EDX, 19
+  MOV     EBX, [ESP+8]
+  INT     0x40
+  POP     EBX
+  RET

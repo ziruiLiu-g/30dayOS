@@ -145,10 +145,11 @@ int cmd_app(struct Console *cons, int *fat, char *cmdline) {
       shtctl = (struct Shtctl *) *((int *) 0x0fe4);
       for (i = 0; i < MAX_SHEETS; i++) {
         sht = &(shtctl->sheets0[i]);
-        if (sht->flags != 0 && sht->task == task) {
+        if ((sht->flags & 0x11) == 0x11 && sht->task == task) {
           sheet_free(sht);
         }
       }
+      timer_cancel_all(&task->fifo);
       memman_free_4k(memman, (int)q, 64 * 1024);
     } else {
       cons_putstr(cons, "ELF file format error.\n");
