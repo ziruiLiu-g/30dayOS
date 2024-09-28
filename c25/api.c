@@ -11,9 +11,9 @@
 
 int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
              int eax) {
-  struct Console *cons = (struct Console *)*((int *) 0x0fec);
-  int ds_base = *((int *) 0xfe8);
   struct Task *task = task_now();
+  int ds_base = task->ds_base;
+  struct Console *cons = task->cons;
   struct Shtctl *shtctl = (struct Shtctl *)*((int *)0x0fe4);
   struct Sheet *sht;
 
@@ -33,8 +33,8 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
     sht->flags |= 0x10;
     sheet_setbuf(sht, (char *) ebx + ds_base, esi, edi, eax);
     make_window8((char *) ebx + ds_base, esi, edi, (char *) ecx + ds_base, 0);
-    sheet_slide(sht, 100, 50);
-    sheet_updown(sht, 3);
+    sheet_slide(sht, (shtctl->xsize - esi) / 2, (shtctl->ysize - edi) / 2);
+    sheet_updown(sht, shtctl->top);
     reg[7] = (int) sht;
   } else if (edx == 6) {  // print font on window
     sht = (struct Sheet *) (ebx & 0xfffffffe);
@@ -113,6 +113,18 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
     timer_set_timer((struct Timer *) ebx, eax);
   } else if (edx == 19) { // free timer
     timer_free((struct Timer *) ebx);
+  } else if (edx == 20) { // free timer
+    if (eax == 0) { // off
+      int i = io_in8(0x61);
+      io_out8(0x61, i & 0x0d);
+    } else { // on
+      int i = 1193180000 / eax;
+      io_out8(0x43, 0xb6);
+      io_out8(0x42, i & 0xff); // page 516
+      io_out8(0x42, i >> 8);
+      i = io_in8(0x61);
+      io_out8(0x61, (i | 0x03) & 0x0f);
+    }
   }
 
   return 0;

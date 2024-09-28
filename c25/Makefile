@@ -16,10 +16,9 @@ CFLAGS += -I ./include -I $(LIBC_DIR)/include
 CFLAGS += -ffunction-sections -nostdlib -nostdinc -fno-builtin -ffreestanding
 CFLAGS += -fno-pie
 
-APP_CFLAGS 	= -Wall -Wno-format -Wno-unused -std=gnu99 -fno-pie -m32
+APP_CFLAGS = -Wall -Wno-format -Wno-unused -std=gnu99 -fno-pie -m32
 APP_LDFLAGS = -m elf_i386 --oformat binary -e main
 APP_ELF_LDFLAGS	= -m elf_i386 --oformat elf32-i386 -e main -pie
-
 
 QEMU_FLAGS 	+= -no-reboot -d in_asm -m size=128
 
@@ -36,9 +35,10 @@ K_OBJS	:= bootpack.bin io.bin pm.bin hankaku.bin desctbl.bin graphic.bin \
 APPS	:= app/hello.hrb app/hello2.hrb app/a.hrb app/hello3.hrb app/crack1.hrb \
 		app/crack2.hrb app/crack3.hrb app/crack4.hrb app/crack5.hrb \
 		app/crack6.hrb app/bug1.hrb app/bug2.hrb app/bug3.hrb \
-		app/bug4.hrb app/hello5.hrb app/winhello.hrb app/winhello2.hrb \
+		app/bug4.hrb app/hello5.hrb app/winhello.hrb app/winhelo2.hrb \
 		app/winhelo3.hrb app/star1.hrb app/stars.hrb app/stars2.hrb \
-		app/lines.hrb app/walk.hrb  app/noodle.hrb
+		app/lines.hrb app/walk.hrb app/noodle.hrb app/beepdown.hrb \
+		app/beepup.hrb app/color.hrb app/color2.hrb
 SYS	:= haribote.sys
 IMG	:= haribote.img
 
@@ -104,10 +104,9 @@ app/winhello.hrb: app/api.o
 	$(CC) $(APP_CFLAGS) -c app/winhello.c -o app/winhello.o
 	$(LD) $(APP_ELF_LDFLAGS) app/winhello.o app/api.o -o app/winhello.hrb
 
-app/winhello2.hrb: app/api.o
+app/winhelo2.hrb: app/api.o
 	$(CC) $(APP_CFLAGS) -c app/winhello2.c -o app/winhello2.o
-	$(LD) $(APP_ELF_LDFLAGS) app/winhello2.o app/api.o -o app/winhello2.hrb
-
+	$(LD) $(APP_ELF_LDFLAGS) app/winhello2.o app/api.o -o app/winhelo2.hrb
 
 app/winhelo3.hrb: app/api.o
 	$(CC) $(APP_CFLAGS) -c app/winhello3.c -o app/winhello3.o
@@ -118,7 +117,7 @@ app/star1.hrb: app/api.o
 	$(LD) $(APP_ELF_LDFLAGS) app/star1.o app/api.o -o app/star1.hrb
 
 app/stars.hrb: app/api.o $(LIBC_DIR)/stdlib/rand.bin
-	$(CC) $(APP_CFLAGS) -I $(LIBC_DIR)/include -c app/stars.c -o app/stars.o
+	$(CC) $(APP_CFLAGS) -c -I $(LIBC_DIR)/include app/stars.c -o app/stars.o
 	$(LD) $(APP_ELF_LDFLAGS) app/stars.o app/api.o $(LIBC_DIR)/stdlib/rand.bin -o app/stars.hrb
 
 app/stars2.hrb: app/api.o $(LIBC_DIR)/stdlib/rand.bin
@@ -136,6 +135,22 @@ app/walk.hrb: app/api.o
 app/noodle.hrb: app/api.o $(LIBC_DIR)/stdio/stdio.bin
 	$(CC) $(APP_CFLAGS) -I $(LIBC_DIR)/include -fno-stack-protector -c app/noodle.c -o app/noodle.o
 	$(LD) $(APP_ELF_LDFLAGS) app/noodle.o app/api.o $(LIBC_DIR)/stdio/stdio.bin -o app/noodle.hrb
+
+app/beepdown.hrb: app/api.o
+	$(CC) $(APP_CFLAGS) -c app/beepdown.c -o app/beepdown.o
+	$(LD) $(APP_ELF_LDFLAGS) app/beepdown.o app/api.o -o app/beepdown.hrb
+
+app/beepup.hrb: app/api.o
+	$(CC) $(APP_CFLAGS) -c app/beepup.c -o app/beepup.o
+	$(LD) $(APP_ELF_LDFLAGS) app/beepup.o app/api.o -o app/beepup.hrb
+
+app/color.hrb: app/api.o
+	$(CC) $(APP_CFLAGS) -c app/color.c -o app/color.o
+	$(LD) $(APP_ELF_LDFLAGS) app/color.o app/api.o -o app/color.hrb
+
+app/color2.hrb: app/api.o
+	$(CC) $(APP_CFLAGS) -c app/color2.c -o app/color2.o
+	$(LD) $(APP_ELF_LDFLAGS) app/color2.o app/api.o -o app/color2.hrb
 
 kernel.sys: ${K_OBJS} ${L_OBJS}
 	$(LD) -m elf_i386 --oformat binary -o kernel.sys -T kernel.ld $^
