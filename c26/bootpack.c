@@ -26,14 +26,14 @@ int main(void)
     struct MouseDec mdec;
     char s[40], mcursor[256];
     struct Shtctl *shtctl;
-    struct Sheet *sht_back, *sht_mouse, *sht_cons[2];
-    unsigned char *buf_back, buf_mouse[256], *buf_cons[2];
+    struct Sheet *sht_back, *sht_mouse;
+    unsigned char *buf_back, buf_mouse[256];
     struct Task *task_cons[2], *task;
 
     struct Console *cons;
 
     struct FIFO32 fifo, keycmd;
-    int fifobuf[128], keycmd_buf[32], *cons_fifo[2];
+    int fifobuf[128], keycmd_buf[32];
     // caplock at 6th bit of binfo->leds, right shift 4 bit and '&7' we get the 4th 5th 6th bit status
     // bin 7 = 111
     int data, key_to = 0, key_shift = 0, key_ctl = 0, key_leds = (binfo->leds >> 4) & 7, keycmd_wait = -1;
@@ -41,7 +41,8 @@ int main(void)
     struct Timer *timer;
 
     int j, x, y;
-    int mmx, mmy; // position before mouse move window
+    int mmx, mmy, mmx2; // position before mouse move window
+    int mx, my, new_mx = -1, new_my = 0, new_wx = 0x7fffffff, new_wy = 0;
     struct Sheet *sht = 0, *key_win;
 
 
@@ -86,29 +87,7 @@ int main(void)
     init_screen8(buf_back, binfo->scrnx, binfo->scrny);
 
     /* For Console */
-    for (int i = 0; i < 2; i++) {
-        sht_cons[i] = sheet_alloc(shtctl);
-        buf_cons[i] = (unsigned char *) memman_alloc_4k(memman, 256 * 165);
-        sheet_setbuf(sht_cons[i], buf_cons[i], 256, 165, -1);
-        make_window8(buf_cons[i], 256, 165, "console",  0);
-        make_textbox8(sht_cons[i], 8, 28, 240, 128, COL8_000000);
-        task_cons[i] = task_alloc();
-        task_cons[i]->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 12; // address of tail of stack. 
-        task_cons[i]->tss.eip = (int) &console_task;
-        task_cons[i]->tss.es = 1 * 8;
-        task_cons[i]->tss.cs = 2 * 8;
-        task_cons[i]->tss.ss = 1 * 8;
-        task_cons[i]->tss.ds = 1 * 8;
-        task_cons[i]->tss.fs = 1 * 8;
-        task_cons[i]->tss.gs = 1 * 8;
-        *((int *) (task_cons[i]->tss.esp + 4)) = (int) sht_cons[i];
-        *((int *) (task_cons[i]->tss.esp + 8)) = (int) memtotal;
-        task_run(task_cons[i], 2, 2); // level = 2; priority = 2;
-        sht_cons[i]->task = task_cons[i];
-        sht_cons[i]->flags |= 0x20; // have cursor
-        cons_fifo[i] = (int *) memman_alloc_4k(memman, 128 * 4);
-        fifo32_init(&task_cons[i]->fifo, 128, cons_fifo[i], task_cons[i]);
-    }
+    key_win = open_console(shtctl, memtotal);
 
     timer = timer_alloc();
     timer_init(timer, &fifo, 1);
@@ -118,23 +97,20 @@ int main(void)
     sht_mouse = sheet_alloc(shtctl);
     sheet_setbuf(sht_mouse, buf_mouse, 16, 16, 99); // 透明色号99
     init_mouse_cursor8(buf_mouse, 99); // 背景色号99
-    int mx = (binfo->scrnx - 16) / 2;
-    int my = (binfo->scrny - 28 - 16) / 2;
+    mx = (binfo->scrnx - 16) / 2;
+    my = (binfo->scrny - 28 - 16) / 2;
 
     sheet_slide(sht_back, 0, 0);
-    sheet_slide(sht_cons[1], 56, 6);
-    sheet_slide(sht_cons[0], 8, 2);
+    sheet_slide(key_win, 32, 4);
     sheet_slide(sht_mouse, mx, my);
     sheet_updown(sht_back, 0);
-    sheet_updown(sht_cons[1], 1);
-    sheet_updown(sht_cons[0], 2);
-    sheet_updown(sht_mouse, 3);
+    sheet_updown(key_win, 1);
+    sheet_updown(sht_mouse, 2);
     fifo32_put(&keycmd, KEYCMD_LED);
     fifo32_put(&keycmd, key_leds);
-
-    key_win = sht_cons[0];
     keywin_on(key_win);
 
+    *((int *) 0x0fec) = (int) &fifo;
 
     for (;;)
     {
@@ -146,13 +122,28 @@ int main(void)
 
         io_cli();
         if (fifo32_status(&fifo) == 0) {
-            task_sleep(task_a);
-            io_sti();
+            if (new_mx >= 0) {
+                io_sti();
+                sheet_slide(sht_mouse, new_mx, new_my);
+                new_mx = -1;
+            } else if (new_wx != 0x7fffffff) {
+                io_sti();
+                sheet_slide(sht, new_wx, new_wy);
+                new_wx = 0x7fffffff;
+            } else {
+                task_sleep(task_a);
+                io_sti();
+            }
         } else {
             data = fifo32_get(&fifo);
             io_sti();
-            if (!key_win->flags) {
-                key_win = shtctl->sheets[shtctl->top - 1];
+            if (key_win != NULL && !key_win->flags) {
+                if (shtctl->top == 1) {
+                    key_win = NULL;
+                } else {
+                    key_win = shtctl->sheets[shtctl->top - 1];
+                    keywin_on(key_win);
+                }
             }
             if (256 <= data && data <= 511) { // keyboard
 
@@ -173,10 +164,10 @@ int main(void)
                     }
                 }
 
-                if (!key_ctl && s[0]) {
+                if (!key_ctl && s[0] && key_win != NULL) {
                     fifo32_put(&key_win->task->fifo, s[0] + 256);
                 }
-                if (data == 256 + 0x2e && key_ctl != 0 && task_cons[0]->tss.ss0 != 0) {
+                if (data == 256 + 0x2e && key_ctl != 0 && key_win != NULL) {
                     task = key_win->task;
                     if (task != 0 && task->tss.ss0 != 0) {
                         cons_putstr(task->cons, "\nBreak(key):\n");
@@ -186,10 +177,19 @@ int main(void)
                         io_sti();
                     }
                 }
+                if (data == 256 + 0x3c && key_shift != 0) {
+                    if (key_win != 0) {
+                        keywin_off(key_win);
+                    }
+                    key_win = open_console(shtctl, memtotal);
+                    sheet_slide(key_win, 32, 4);
+                    sheet_updown(key_win, shtctl->top);
+                    keywin_on(key_win);
+                }
                 if (data == 256 + 0x0e) {   // backspace
                     fifo32_put(&key_win->task->fifo, 8 + 256);
                 }
-                if (data == 256 + 0x0f) {   // tab
+                if (data == 256 + 0x0f && key_win != 0) {   // tab
                     keywin_off(key_win);
                     j = key_win->height - 1; // press tab, switch to next windown
                     if (j == 0) {
@@ -262,7 +262,8 @@ int main(void)
                     }
 
                     sheet_slide(sht_mouse, mx, my);
-
+                    new_mx = mx;
+                    new_my = my;
                     if (mdec.btn & 0x01) {
                         // mouse left click
                         // search sheet from top to bottom
@@ -282,15 +283,22 @@ int main(void)
                                         if (3 <= x && x < sht->bxsize - 3 && 3 <= y && y < 21) {
                                             mmx = mx;
                                             mmy = my;
+                                            mmx2 = sht->vx0;
+                                            new_wy = sht->vy0;
                                         }       
                                         if (sht->bxsize - 21 <= x && x < sht->bxsize - 5 && 5 <= y && y < 19) {
                                             // click x "close"
-                                            if ((sht->flags & 0x10) != 0) {
+                                            if ((sht->flags & 0x10) != 0) { // if app window?
                                                 task = sht->task;
                                                 cons_putstr(task->cons, "\nBreak(mouse) :\n");
                                                 io_cli();
                                                 task->tss.eax = (int) &(task->tss.esp0);
                                                 task->tss.eip = (int) asm_end_app;
+                                                io_sti();
+                                            } else { // console window
+                                                task = sht->task;
+                                                io_cli();
+                                                fifo32_put(&task->fifo, 4);
                                                 io_sti();
                                             }
                                         }     
@@ -301,14 +309,22 @@ int main(void)
                         } else {
                             x = mx - mmx;
                             y = my - mmy;
-                            sheet_slide(sht, sht->vx0 + x, sht->vy0 + y);
-                            mmx = mx;
+                            new_wx = (mmx2 + x + 2) & ~3;
+                            new_wy = new_wy + y;
                             mmy = my;
                         }
                     } else {
                         mmx = -1;
+                        if (new_wx != 0x7fffffff) {
+                            sheet_slide(sht, new_wx, new_wy);
+                            new_wx = 0x7fffffff;
+                        }
                     }
                 }
+            } else if (768 <= data && data <= 1023) {
+                close_console(shtctl->sheets0 + (data - 768));
+            } else if (1024 <= data && data <= 2023) {
+                close_cons_task(taskctl->tasks0 + (data - 1024));
             }
         }
     }

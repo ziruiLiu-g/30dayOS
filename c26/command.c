@@ -12,6 +12,7 @@
 #include "sheet.h"
 #include "task.h"
 #include "app.h"
+#include "io.h"
 
 void cmd_mem(struct Console *cons, unsigned int memtotal) {
   struct MemMan *memman = (struct MemMan *)MEMMAN_ADDR;
@@ -79,6 +80,58 @@ void cmd_type(struct Console *cons, int *fat, char *cmdline) {
   }
 
   cons_newline(cons);
+}
+
+void cmd_exit(struct Console *cons, int *fat) {
+  struct MemMan *memman = (struct MemMan *) MEMMAN_ADDR;
+  struct Task *task = task_now();
+  struct Shtctl *shtctl = (struct Shtctl *) *((int *) 0x0fe4);
+  struct FIFO32 *fifo = (struct FIFO32 *) *((int *) 0x0fec);
+  timer_cancel(cons->timer);
+  memman_free_4k(memman, (int) fat, 4 * 2880);
+  io_cli();
+
+  if (cons->sheet != 0) {
+    fifo32_put(fifo, cons->sheet - shtctl->sheets0 + 768); // 768 ~1023
+  } else {
+    fifo32_put(fifo, cons->sheet - shtctl->sheets0 + 1024); // 1024~2023
+  }
+
+  io_sti();
+  for (;;) {
+    task_sleep(task);
+  }
+}
+
+void cmd_start(struct Console *cons, char* cmdline, int memtotal) {
+  struct Shtctl *shtctl = (struct Shtctl *) *((int *) 0x0fe4);
+  struct Sheet *sht = open_console(shtctl, memtotal);
+  struct FIFO32 *fifo = &sht->task->fifo;
+
+  int i;
+  sheet_slide(sht, 32, 4);
+  sheet_updown(sht, shtctl->top);
+
+  for (i = 6; cmdline[i] != 0; i++) {
+    fifo32_put(fifo, cmdline[i] + 256);
+  }
+  fifo32_put(fifo, 10 + 256); // enter
+  cons_newline(cons);
+  return;
+}
+
+void cmd_ncst(struct Console *cons, char* cmdline, int memtotal) {
+  struct Task *task = open_cons_task(0, memtotal);
+  struct FIFO32 *fifo = &task->fifo;
+
+  int i;
+
+  for (i = 5; cmdline[i] != 0; i++) {
+    fifo32_put(fifo, cmdline[i] + 256);
+  }
+  fifo32_put(fifo, 10 + 256); // enter
+  cons_newline(cons);
+  return;
 }
 
 int cmd_app(struct Console *cons, int *fat, char *cmdline) {
