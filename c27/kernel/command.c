@@ -177,8 +177,8 @@ int cmd_app(struct Console *cons, int *fat, char *cmdline) {
       q = (char *)memman_alloc_4k(memman, 64 * 1024);
       task->ds_base = (int) q;
 
-      set_segmdesc(gdt + task->sel/8 + 1000, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
-      set_segmdesc(gdt + task->sel/8 + 2000, 64 * 1024  - 1, (int)q, AR_DATA32_RW + 0x60);
+      set_segmdesc(task->ldt + 0, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
+      set_segmdesc(task->ldt + 1, 64 * 1024 - 1, (int)q, AR_DATA32_RW + 0x60);
 
       for (int i = 0; i < elfhdr->e_shnum; i++) {
         Elf32_Shdr *shdr =
@@ -192,9 +192,7 @@ int cmd_app(struct Console *cons, int *fat, char *cmdline) {
           q[shdr->sh_addr + i] = p[shdr->sh_offset + i];
         }
       }
-
-      start_app(elfhdr->e_entry, task->sel + 1000 * 8, 0, task->sel + 2000 * 8,
-                &(task->tss.esp0));
+      start_app(elfhdr->e_entry, 0 * 8 + 4, 0, 1 * 8 + 4, &(task->tss.esp0));
       /* To close win */
       shtctl = (struct Shtctl *) *((int *) 0x0fe4);
       for (i = 0; i < MAX_SHEETS; i++) {

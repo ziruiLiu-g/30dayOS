@@ -43,8 +43,7 @@ int main(void)
     int j, x, y;
     int mmx, mmy, mmx2; // position before mouse move window
     int mx, my, new_mx = -1, new_my = 0, new_wx = 0x7fffffff, new_wy = 0;
-    struct Sheet *sht = 0, *key_win;
-
+    struct Sheet *sht = 0, *key_win, *sht2;
 
     init_gdtidt();
     init_pic(); // GDT/IDT完成初始化，开放CPU中断
@@ -299,6 +298,10 @@ int main(void)
                                                 task_run(task, -1, 0);
                                             } else { // console window
                                                 task = sht->task;
+                                                sheet_updown(sht, -1);
+                                                keywin_off(key_win);
+                                                key_win = shtctl->sheets[shtctl->top - 1];
+                                                keywin_on(key_win);
                                                 io_cli();
                                                 fifo32_put(&task->fifo, 4);
                                                 io_sti();
@@ -327,6 +330,10 @@ int main(void)
                 close_console(shtctl->sheets0 + (data - 768));
             } else if (1024 <= data && data <= 2023) {
                 close_cons_task(taskctl->tasks0 + (data - 1024));
+            } else if (2024 <= data && data <= 2279) {
+                sht2 = shtctl->sheets0 + (data - 2024);
+                memman_free_4k(memman, (int) sht2->buf, 256 * 165);
+                sheet_free(sht2);
             }
         }
     }

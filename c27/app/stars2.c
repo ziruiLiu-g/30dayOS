@@ -1,14 +1,10 @@
 #include <stdlib.h>
 
-int api_open_win(char *buf, int xsize, int ysize, int col_inv, char *title);
-void api_boxfill_win(int win, int x0, int y0, int x1, int y1, int col);
-void api_malloc_init(void);
-void *api_malloc(int size);
-void api_point(int win, int x, int y, int col);
-void api_end(void);
-void api_refresh_win(int win, int x0, int y0, int x1, int y1);
+#include "api.h"
+
 int main() {
   api_malloc_init();
+
   char *buf = api_malloc(150 * 100);
   int win = api_open_win(buf, 150, 100, -1, "stars2");
   api_boxfill_win(win + 1, 6, 26, 143, 93, 0);
@@ -20,6 +16,12 @@ int main() {
   }
 
   api_refresh_win(win, 6, 26, 144, 94);
+
+  for (;;) {
+    if (api_get_key(1) == 0x0a) {
+      break;
+    }
+  }
   
   api_end();
 

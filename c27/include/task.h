@@ -3,6 +3,7 @@
 
 #include "memory.h"
 #include "timer.h"
+#include "desctbl.h"
 #include "console.h"
 
 #define MAX_TASKS 1000
@@ -26,6 +27,7 @@ struct Task {
   int priority, level;
   struct FIFO32 fifo;
   struct TSS32 tss;
+  struct SegmentDescriptor ldt[2];
   struct Console *cons;
   int ds_base, cons_stack;
 };

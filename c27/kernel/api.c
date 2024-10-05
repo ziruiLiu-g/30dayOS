@@ -8,6 +8,7 @@
 #include "window.h"
 #include "io.h"
 #include "timer.h"
+#include "fifo.h"
 
 int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
              int eax) {
@@ -16,6 +17,7 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
   struct Console *cons = task->cons;
   struct Shtctl *shtctl = (struct Shtctl *)*((int *)0x0fe4);
   struct Sheet *sht;
+  struct FIFO32 *sys_fifo = (struct FIFO32 *) *((int *) 0x0fec);
 
   int *reg = &eax + 1;
 
@@ -31,8 +33,8 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
     sht = sheet_alloc(shtctl);
     sht->task = task;
     sht->flags |= 0x10;
-    sheet_setbuf(sht, (char *) ebx + ds_base, esi, edi, eax);
-    make_window8((char *) ebx + ds_base, esi, edi, (char *) ecx + ds_base, 0);
+    sheet_setbuf(sht, (unsigned char *) ebx + ds_base, esi, edi, eax);
+    make_window8((unsigned char *) ebx + ds_base, esi, edi, (char *) ecx + ds_base, 0);
     sheet_slide(sht, (shtctl->xsize - esi) / 2 & ~3, (shtctl->ysize - edi) / 2);
     sheet_updown(sht, shtctl->top);
     reg[7] = (int) sht;
@@ -59,10 +61,10 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
     ecx = (ecx + 0x0f) & 0xfffffff0;
     memman_free((struct MemMan *) (ebx + ds_base), eax, ecx);
   } else if (edx == 11) { // draw point
-    sht = (struct Sheet *) (ebx & 0xfffffffe);
+    sht = (struct Sheet *)(ebx & 0xfffffffe);
     sht->buf[sht->bxsize * edi + esi] = eax;
-    if ((ebx & 1) == 0) {
-      sheet_refresh(sht, eax, ecx, esi + 1, edi + 1);
+    if (!(ebx & 1)) {
+      sheet_refresh(sht, esi, edi, esi + 1, edi + 1);
     }
   } else if (edx == 12) {
     sht = (struct Sheet *) ebx;
@@ -98,6 +100,13 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
       }
       if (i == 3) { // cursor off
         cons->cur_c = -1;
+      }
+      if (i == 4) { // close console win
+        timer_cancel(cons->timer);
+        io_cli();
+        fifo32_put(sys_fifo, cons->sheet - shtctl->sheets0 + 2024); /* 2024 - 2279 */
+        cons->sheet = NULL;
+        io_sti();
       }
       if (256 <= i) { // keyboard input
         reg[7] = i - 256;

@@ -31,7 +31,7 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
   cons.cur_c = -1;
   task->cons = &cons;
   
-  if (sheet) {
+  if (cons.sheet) {
     cons.timer = timer_alloc();
     timer_init(cons.timer, &task->fifo, 1);
     timer_set_timer(cons.timer, 50);
@@ -52,7 +52,7 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
     } else {
       int data = fifo32_get(&task->fifo);
       io_sti();
-      if (data <= 1) {
+      if (data <= 1 && cons.sheet) {
         if (data) {
           timer_init(cons.timer, &task->fifo, 0);
           if (cons.cur_c >= 0) {
@@ -74,8 +74,10 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
       }
       // 光标OFF
       if (data == 3) {
-        box_fill8(sheet->buf, sheet->bxsize, COL8_000000, cons.cur_x,
+        if (cons.sheet) {
+          box_fill8(cons.sheet->buf, cons.sheet->bxsize, COL8_000000, cons.cur_x,
                   cons.cur_y, cons.cur_x + 7, cons.cur_y + 15);
+        }
         cons.cur_c = -1;
       }
 
@@ -98,7 +100,7 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
           cmdline[cons.cur_x / 8 - 2] = '\0';
           cons_newline(&cons);
           cons_run_cmd(cmdline, &cons, fat, memtotal);
-          if (!sheet) {
+          if (!cons.sheet) {
             cmd_exit(&cons, fat);
           }
 
@@ -111,12 +113,12 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
         }
       }
 
-      if (sheet) {
+      if (cons.sheet) {
         if (cons.cur_c >= 0) {
-          box_fill8(sheet->buf, sheet->bxsize, cons.cur_c, cons.cur_x, cons.cur_y,
+          box_fill8(cons.sheet->buf, cons.sheet->bxsize, cons.cur_c, cons.cur_x, cons.cur_y,
                     cons.cur_x + 7, cons.cur_y + 15);
         }
-        sheet_refresh(sheet, cons.cur_x, cons.cur_y, cons.cur_x + 8,
+        sheet_refresh(cons.sheet, cons.cur_x, cons.cur_y, cons.cur_x + 8,
                       cons.cur_y + 16);
       }
     }

@@ -17,7 +17,7 @@ CFLAGS += -ffunction-sections -nostdlib -nostdinc -fno-builtin -ffreestanding
 CFLAGS += -fno-pie
 
 APP_CFLAGS = -Wall -Wno-format -Wno-unused -std=gnu99 -fno-pie -m32
-APP_LDFLAGS = -m elf_i386 --oformat binary -e main
+APP_LDFLAGS	= -m elf_i386 --oformat elf32-i386 -e main -pie
 APP_ELF_LDFLAGS	= -m elf_i386 --oformat elf32-i386 -e main -pie
 
 QEMU_FLAGS 	+= -no-reboot -d in_asm -m size=128
@@ -26,11 +26,14 @@ QEMU_FLAGS 	+= -no-reboot -d in_asm -m size=128
 L_OBJS  := $(LIBC_DIR)/stdio/stdio.bin $(LIBC_DIR)/string/strcmp.bin \
 		$(LIBC_DIR)/string/strncmp.bin $(LIBC_DIR)/stdlib/rand.bin
 # Kernel Objects
-K_OBJS	:= bootpack.bin io.bin pm.bin hankaku.bin desctbl.bin graphic.bin \
-		int.bin inthandler.bin fifo.bin keyboard.bin mouse.bin \
-		memory.bin sheet.bin window.bin timer.bin task_asm.bin \
-		task.bin console.bin fs.bin command.bin api.bin api_asm.bin \
-		app.bin elf.bin
+K_OBJS	:= kernel/bootpack.bin kernel/io.bin kernel/pm.bin kernel/hankaku.bin \
+		kernel/desctbl.bin kernel/graphic.bin kernel/int.bin \
+		kernel/inthandler.bin kernel/fifo.bin kernel/keyboard.bin \
+		kernel/mouse.bin kernel/memory.bin kernel/sheet.bin \
+		kernel/window.bin kernel/timer.bin kernel/task_asm.bin \
+		kernel/task.bin kernel/console.bin kernel/fs.bin \
+		kernel/command.bin kernel/api.bin kernel/api_asm.bin \
+		kernel/app.bin kernel/elf.bin
 # Applications
 APPS	:= app/hello.hrb app/hello2.hrb app/a.hrb app/hello3.hrb app/crack1.hrb \
 		app/crack2.hrb app/crack3.hrb app/crack4.hrb app/crack5.hrb \
@@ -38,7 +41,7 @@ APPS	:= app/hello.hrb app/hello2.hrb app/a.hrb app/hello3.hrb app/crack1.hrb \
 		app/bug4.hrb app/hello5.hrb app/winhello.hrb app/winhelo2.hrb \
 		app/winhelo3.hrb app/star1.hrb app/stars.hrb app/stars2.hrb \
 		app/lines.hrb app/walk.hrb app/noodle.hrb app/beepdown.hrb \
-		app/beepup.hrb app/color.hrb app/color2.hrb
+		app/beepup.hrb app/color.hrb app/color2.hrb app/crack7.hrb
 SYS	:= haribote.sys
 IMG	:= haribote.img
 
@@ -47,23 +50,27 @@ QEMU_FLAGS += -gdb tcp::1234 -S
 CFLAGS += -g
 endif
 
-ipl.bin:
-	$(AS) -f bin ipl.asm -o ipl.bin -l ipl.lst
+kernel/ipl.bin:
+	$(AS) -f bin kernel/ipl.asm -o kernel/ipl.bin -l kernel/ipl.lst
 
-asmhead.bin:
-	$(AS) -f bin asmhead.asm -o asmhead.bin -l asmhead.lst
+kernel/asmhead.bin:
+	$(AS) -f bin kernel/asmhead.asm -o kernel/asmhead.bin -l kernel/asmhead.lst
 
-hankaku.bin: ../hankaku/hankaku.asm
+kernel/hankaku.bin: ../hankaku/hankaku.asm
 	$(AS) -f elf $< -o $@
 
-%.bin: %.asm
+kernel/%.bin: kernel/%.asm
 	$(AS) -f elf $< -o $@ -l $(subst .asm,.lst,$<)
 
 %.bin: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Applications
+app/api.lib:
+	$(AS) -f elf app/api.asm -o $@
+
 %.hrb: %.asm
-	$(AS) -f bin $< -o $@  -l $(subst .asm,.lst,$<)
+	$(AS) -f elf $< -o $@ -l $(subst .asm,.lst,$<)
 
 app/api.o:
 	$(AS) -f elf app/api.asm -o app/api.o
@@ -152,31 +159,35 @@ app/color2.hrb: app/api.o
 	$(CC) $(APP_CFLAGS) -c app/color2.c -o app/color2.o
 	$(LD) $(APP_ELF_LDFLAGS) app/color2.o app/api.o -o app/color2.hrb
 
-kernel.sys: ${K_OBJS} ${L_OBJS}
-	$(LD) -m elf_i386 --oformat binary -o kernel.sys -T kernel.ld $^
+# Kernel
+kernel/kernel.sys: ${K_OBJS} ${L_OBJS}
+	$(LD) -m elf_i386 --oformat binary -o kernel/kernel.sys -T kernel/kernel.ld $^
 
-haribote.sys: asmhead.bin kernel.sys
-	cat asmhead.bin > haribote.sys
-	cat kernel.sys >> haribote.sys
+haribote.sys: kernel/asmhead.bin kernel/kernel.sys
+	cat kernel/asmhead.bin > haribote.sys
+	cat kernel/kernel.sys >> haribote.sys
 
-image: ipl.bin haribote.sys ${APPS}
+image: kernel/ipl.bin haribote.sys ${APPS}
 	dd if=/dev/zero of=$(IMG) bs=512 count=2880
-	dd if=ipl.bin of=$(IMG) bs=512 count=1 conv=notrunc
+	dd if=kernel/ipl.bin of=$(IMG) bs=512 count=1 conv=notrunc
 	mcopy -i $(IMG) haribote.sys ::/
 	mcopy -i $(IMG) ${APPS} ::/
 
 all: ${L_OBJS} ${K_OBJS} ${APPS} haribote.sys image
 
 clean:
-	rm -rf *.bin
-	rm -rf *.sys
-	rm -rf *.obj
-	rm -rf *.lst
 	rm -rf $(IMG)
-	rm -rf **/**/*.bin
+	rm -rf *.bin
+	rm -rf *.lst
+	rm -rf *.obj
+	rm -rf *.sys
 	rm -rf app/*.hrb
-	rm -rf **/*.o
+	rm -rf **/*.bin
+	rm -rf **/*.lib
 	rm -rf **/*.lst
+	rm -rf **/*.o
+	rm -rf **/*.sys
+	rm -rf **/**/*.bin
 	rm -rf $(LIBC_DIR)/**/*.bin
 
 qemu: clean all
