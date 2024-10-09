@@ -17,8 +17,7 @@ CFLAGS += -ffunction-sections -nostdlib -nostdinc -fno-builtin -ffreestanding
 CFLAGS += -fno-pie
 
 APP_CFLAGS = -Wall -Wno-format -Wno-unused -std=gnu99 -fno-pie -m32
-APP_LDFLAGS	= -m elf_i386 --oformat elf32-i386 -e main -pie
-APP_ELF_LDFLAGS	= -m elf_i386 --oformat elf32-i386 -e main -pie
+APP_LDFLAGS = -m elf_i386 --oformat elf32-i386 -e main -pie
 
 QEMU_FLAGS 	+= -no-reboot -d in_asm -m size=128
 
@@ -38,10 +37,12 @@ K_OBJS	:= kernel/bootpack.bin kernel/io.bin kernel/pm.bin kernel/hankaku.bin \
 APPS	:= app/hello.hrb app/hello2.hrb app/a.hrb app/hello3.hrb app/crack1.hrb \
 		app/crack2.hrb app/crack3.hrb app/crack4.hrb app/crack5.hrb \
 		app/crack6.hrb app/bug1.hrb app/bug2.hrb app/bug3.hrb \
-		app/bug4.hrb app/hello5.hrb app/winhello.hrb app/winhelo2.hrb \
-		app/winhelo3.hrb app/star1.hrb app/stars.hrb app/stars2.hrb \
+		app/bug4.hrb app/hello5.hrb app/winhello.hrb app/winhello2.hrb \
+		app/winhello3.hrb app/star1.hrb app/stars.hrb app/stars2.hrb \
 		app/lines.hrb app/walk.hrb app/noodle.hrb app/beepdown.hrb \
-		app/beepup.hrb app/color.hrb app/color2.hrb app/crack7.hrb
+		app/beepup.hrb app/color.hrb app/color2.hrb app/crack7.hrb \
+		app/sosu.hrb app/sosu2.hrb app/sosu3.hrb app/typeipl.hrb \
+		app/cat.hrb
 SYS	:= haribote.sys
 IMG	:= haribote.img
 
@@ -72,92 +73,50 @@ app/api.lib:
 %.hrb: %.asm
 	$(AS) -f elf $< -o $@ -l $(subst .asm,.lst,$<)
 
-app/api.o:
-	$(AS) -f elf app/api.asm -o app/api.o
+app/%.o: app/%.c
+	$(CC) $(APP_CFLAGS) -I $(LIBC_DIR)/include -c $< -o $@
 
-app/a.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/a.c -o app/a.o
-	$(LD) $(APP_LDFLAGS) app/a.o app/api.o -o app/a.hrb
+app/bug1.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/bug1.c -o app/bug1.o
 
-app/hello3.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/hello3.c -o app/hello3.o
-	$(LD) $(APP_LDFLAGS) app/hello3.o app/api.o -o app/hello3.hrb
+app/noodle.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/noodle.c -o app/noodle.o
 
-app/crack1.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/crack1.c -o app/crack1.o
-	$(LD) $(APP_LDFLAGS) app/crack1.o app/api.o -o app/crack1.hrb
+app/sosu.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/sosu.c -o app/sosu.o
 
-app/bug1.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -fno-stack-protector -c app/bug1.c -o app/bug1.o
-	$(LD) $(APP_LDFLAGS) app/bug1.o app/api.o -o app/bug1.hrb
+app/sosu2.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/sosu2.c -o app/sosu2.o
 
-app/bug2.hrb:
-	$(CC) $(APP_CFLAGS) -c app/bug2.c -o app/bug2.o
-	$(LD) $(APP_LDFLAGS) app/bug2.o -o app/bug2.hrb
+app/sosu3.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/sosu3.c -o app/sosu3.o
 
-app/bug3.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/bug3.c -o app/bug3.o
-	$(LD) $(APP_LDFLAGS) app/bug3.o app/api.o -o app/bug3.hrb
+app/typeipl.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/typeipl.c -o app/typeipl.o
 
-app/bug4.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/bug4.c -o app/bug4.o
-	$(LD) $(APP_ELF_LDFLAGS) app/bug4.o app/api.o -o app/bug4.hrb
+app/cat.o:
+	$(CC) $(APP_CFLAGS) -fno-stack-protector -I $(LIBC_DIR)/include -c app/cat.c -o app/cat.o
 
-app/hello5.hrb:
-	$(AS) -f elf app/hello5.asm -o app/hello5.o
-	$(LD) $(APP_ELF_LDFLAGS) app/hello5.o -o app/hello5.hrb
+app/%.hrb: app/%.o app/api.lib
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
-app/winhello.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/winhello.c -o app/winhello.o
-	$(LD) $(APP_ELF_LDFLAGS) app/winhello.o app/api.o -o app/winhello.hrb
+app/stars.hrb: app/stars.o app/api.lib $(LIBC_DIR)/stdlib/rand.bin
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
-app/winhelo2.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/winhello2.c -o app/winhello2.o
-	$(LD) $(APP_ELF_LDFLAGS) app/winhello2.o app/api.o -o app/winhelo2.hrb
+app/stars2.hrb: app/stars2.o app/api.lib $(LIBC_DIR)/stdlib/rand.bin
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
-app/winhelo3.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/winhello3.c -o app/winhello3.o
-	$(LD) $(APP_ELF_LDFLAGS) app/winhello3.o app/api.o -o app/winhelo3.hrb
+app/noodle.hrb: app/noodle.o app/api.lib $(LIBC_DIR)/stdio/stdio.bin
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
-app/star1.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/star1.c -o app/star1.o
-	$(LD) $(APP_ELF_LDFLAGS) app/star1.o app/api.o -o app/star1.hrb
+app/sosu.hrb: app/sosu.o app/api.lib $(LIBC_DIR)/stdio/stdio.bin
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
-app/stars.hrb: app/api.o $(LIBC_DIR)/stdlib/rand.bin
-	$(CC) $(APP_CFLAGS) -c -I $(LIBC_DIR)/include app/stars.c -o app/stars.o
-	$(LD) $(APP_ELF_LDFLAGS) app/stars.o app/api.o $(LIBC_DIR)/stdlib/rand.bin -o app/stars.hrb
+app/sosu2.hrb: app/sosu2.o app/api.lib $(LIBC_DIR)/stdio/stdio.bin
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
-app/stars2.hrb: app/api.o $(LIBC_DIR)/stdlib/rand.bin
-	$(CC) $(APP_CFLAGS) -I $(LIBC_DIR)/include -c app/stars2.c -o app/stars2.o
-	$(LD) $(APP_ELF_LDFLAGS) app/stars2.o app/api.o $(LIBC_DIR)/stdlib/rand.bin -o app/stars2.hrb
-
-app/lines.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/lines.c -o app/lines.o
-	$(LD) $(APP_ELF_LDFLAGS) app/lines.o app/api.o -o app/lines.hrb
-
-app/walk.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/walk.c -o app/walk.o
-	$(LD) $(APP_ELF_LDFLAGS) app/walk.o app/api.o -o app/walk.hrb
-
-app/noodle.hrb: app/api.o $(LIBC_DIR)/stdio/stdio.bin
-	$(CC) $(APP_CFLAGS) -I $(LIBC_DIR)/include -fno-stack-protector -c app/noodle.c -o app/noodle.o
-	$(LD) $(APP_ELF_LDFLAGS) app/noodle.o app/api.o $(LIBC_DIR)/stdio/stdio.bin -o app/noodle.hrb
-
-app/beepdown.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/beepdown.c -o app/beepdown.o
-	$(LD) $(APP_ELF_LDFLAGS) app/beepdown.o app/api.o -o app/beepdown.hrb
-
-app/beepup.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/beepup.c -o app/beepup.o
-	$(LD) $(APP_ELF_LDFLAGS) app/beepup.o app/api.o -o app/beepup.hrb
-
-app/color.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/color.c -o app/color.o
-	$(LD) $(APP_ELF_LDFLAGS) app/color.o app/api.o -o app/color.hrb
-
-app/color2.hrb: app/api.o
-	$(CC) $(APP_CFLAGS) -c app/color2.c -o app/color2.o
-	$(LD) $(APP_ELF_LDFLAGS) app/color2.o app/api.o -o app/color2.hrb
+app/sosu3.hrb: app/sosu3.o app/api.lib $(LIBC_DIR)/stdio/stdio.bin
+	$(LD) $(APP_LDFLAGS) $^ -o $@
 
 # Kernel
 kernel/kernel.sys: ${K_OBJS} ${L_OBJS}
@@ -172,6 +131,7 @@ image: kernel/ipl.bin haribote.sys ${APPS}
 	dd if=kernel/ipl.bin of=$(IMG) bs=512 count=1 conv=notrunc
 	mcopy -i $(IMG) haribote.sys ::/
 	mcopy -i $(IMG) ${APPS} ::/
+	mcopy -i $(IMG) kernel/ipl.asm ::/
 
 all: ${L_OBJS} ${K_OBJS} ${APPS} haribote.sys image
 

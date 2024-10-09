@@ -9,6 +9,8 @@
 #include "io.h"
 #include "timer.h"
 #include "fifo.h"
+#include "bootpack.h"
+#include "fs.h"
 
 int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
              int eax) {
@@ -18,6 +20,10 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
   struct Shtctl *shtctl = (struct Shtctl *)*((int *)0x0fe4);
   struct Sheet *sht;
   struct FIFO32 *sys_fifo = (struct FIFO32 *) *((int *) 0x0fec);
+
+  struct FileInfo *finfo;
+  struct FileHandle *fh;
+  struct MemMan *memman = (struct MemMan *) MEMMAN_ADDR;
 
   int *reg = &eax + 1;
 
@@ -41,13 +47,13 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
   } else if (edx == 6) {  // print font on window
     sht = (struct Sheet *) (ebx & 0xfffffffe);
     put_fonts8_asc(sht->buf, sht->bxsize, esi, edi, eax, (char *) ebp + ds_base);
-    if ((ebx & 1) == 0) {
+    if (!(ebx & 1)) {
       sheet_refresh(sht, esi, edi, esi + ecx * 8, edi + 16);
     }
   } else if (edx == 7) {  // draw block
     sht = (struct Sheet *) (ebx & 0xfffffffe);
     box_fill8(sht->buf, sht->bxsize, ebp, eax, ecx, esi, edi);
-    if ((ebx & 1) == 0) {
+    if (!(ebx & 1)) {
       sheet_refresh(sht, eax, ecx, esi + 1, edi + 1);
     }
   } else if (edx == 8) {  // memman init
@@ -134,6 +140,83 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx,
       i = io_in8(0x61);
       io_out8(0x61, (i | 0x03) & 0x0f);
     }
+  } else if (edx == 21) {
+    int i = 0;
+    for (i = 0; i < 8; i++) {
+      if (task->fHandle[i].buf == NULL) {
+        break;
+      }
+    }
+    fh = &task->fHandle[i];
+    reg[7] = 0;
+    if (i < 8) {
+      finfo = file_search((char *)(ebx + ds_base),
+                          (struct FileInfo *)(ADR_DISKIMG + 0x002600), 224);
+      if (finfo) {
+        reg[7] = (int)fh;
+        fh->buf = (char *)memman_alloc_4k(memman, finfo->size);
+        fh->size = finfo->size;
+        fh->pos = 0;
+        file_load_file(finfo->clustno, finfo->size, fh->buf, task->fat,
+                       (char *)(ADR_DISKIMG + 0x003e00));
+      }
+    }
+  } else if (edx == 22) {
+    fh = (struct FileHandle *)eax;
+    memman_free_4k(memman, (int)fh->buf, fh->size);
+    fh->buf = NULL;
+  } else if (edx == 23) {
+    fh = (struct FileHandle *)eax;
+    if (ecx == 0) {
+      fh->pos = ebx;
+    } else if (ecx == 1) {
+      fh->pos += ebx;
+    } else if (ecx == 2) {
+      fh->pos = fh->size + ebx;
+    }
+
+    if (fh->pos < 0) {
+      fh->pos = 0;
+    }
+    if (fh->pos > fh->size) {
+      fh->pos = fh->size;
+    }
+  } else if (edx == 24) {
+    fh = (struct FileHandle *)eax;
+    if (ecx == 0) {
+      reg[7] = fh->size;
+    } else if (ecx == 1) {
+      reg[7] = fh->pos;
+    } else if (ecx == 2) {
+      reg[7] = fh->pos - fh->size;
+    }
+  } else if (edx == 25) {
+    int i = 0;
+    fh = (struct FileHandle *)eax;
+    for (i = 0; i < ecx; i++) {
+      if (fh->pos == fh->size) {
+        break;
+      }
+      *((char *)(ebx + ds_base + i)) = fh->buf[fh->pos];
+      fh->pos++;
+    }
+    reg[7] = i;
+  } else if (edx == 26) {
+    int i = 0;
+    for (;;) {
+      *((char *)(ebx + ds_base) + i) = task->cmdline[i];
+      if (task->cmdline[i] == '\0') {
+        break;
+      }
+
+      if (i >= ecx) {
+        break;
+      }
+
+      i++;
+    }
+
+    reg[7] = i;
   }
 
   return 0;

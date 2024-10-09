@@ -30,6 +30,9 @@ struct Task {
   struct SegmentDescriptor ldt[2];
   struct Console *cons;
   int ds_base, cons_stack;
+  struct FileHandle *fHandle;
+  int *fat;
+  char *cmdline;
 };
 
 struct TaskLevel {

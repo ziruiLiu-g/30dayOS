@@ -24,12 +24,14 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
   struct SegmentDescriptor *gdt = (struct SegmentDescriptor *)ADR_GDT;
   int x, y;
   struct Console cons;
+  struct FileHandle fHandle[8];
 
   cons.sheet = sheet;
   cons.cur_x = 8;
   cons.cur_y = 28;
   cons.cur_c = -1;
   task->cons = &cons;
+  task->cmdline = cmdline;
   
   if (cons.sheet) {
     cons.timer = timer_alloc();
@@ -38,7 +40,11 @@ void console_task(struct Sheet *sheet, unsigned int memtotal) {
   }
 
   file_read_fat(fat, (unsigned char *)(ADR_DISKIMG + 0x000200));
-
+  for (int i = 0; i < 8; i++) {
+    fHandle[i].buf = NULL;
+  }
+  task->fHandle = fHandle;
+  task->fat = fat;
   cons_putchar(&cons, '>', 1);
 
   
@@ -213,7 +219,7 @@ void cons_run_cmd(char *cmdline, struct Console *cons, int *fat,
     cmd_cls(cons);
   } else if (!strcmp(cmdline, "ls") && cons->sheet) {
     cmd_dir(cons);
-  } else if (!strncmp(cmdline, "cat ", 4) && cons->sheet) {
+  } else if (!strncmp(cmdline, "type ", 5) && cons->sheet) {
     cmd_type(cons, fat, cmdline);
   } else if (!strcmp(cmdline, "exit")) {
     cmd_exit(cons, fat);

@@ -66,7 +66,7 @@ void cmd_dir(struct Console *cons) {
 void cmd_type(struct Console *cons, int *fat, char *cmdline) {
   struct MemMan *memman = (struct MemMan *)MEMMAN_ADDR;
   struct FileInfo *finfo = file_search(
-      cmdline + 4, (struct FileInfo *)(ADR_DISKIMG + 0x002600), 224);
+      cmdline + 5, (struct FileInfo *)(ADR_DISKIMG + 0x002600), 224);
   char *p;
 
   if (finfo) {
@@ -199,6 +199,13 @@ int cmd_app(struct Console *cons, int *fat, char *cmdline) {
         sht = &(shtctl->sheets0[i]);
         if ((sht->flags & 0x11) == 0x11 && sht->task == task) {
           sheet_free(sht);
+        }
+      }
+
+      for (i = 0; i < 8; i++) {
+        if (task->fHandle[i].buf != NULL) {
+          memman_free_4k(memman, (int) task->fHandle[i].buf, task->fHandle[i].size);
+          task->fHandle[i].buf = 0;
         }
       }
       timer_cancel_all(&task->fifo);
